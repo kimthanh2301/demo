@@ -167,33 +167,29 @@
     <script>
         const DAYS = ['T2','T3','T4','T5','T6','T7','CN'];
 
+        // data[i]: mMin/eMin = phút (0-1439), mSt/eSt = 0(chưa) 1(uống) 2(quên)
         let data = Array(7).fill(0).map(() => ({ mMin: 480, eMin: 1080, mSt: 0, eSt: 0 }));
         let cfg = {}, acts = [];
 
         const toTime = m => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
         const toMin  = t => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
-        
-        const encode = d => d.mMin + d.eMin * 2000 + (d.mSt * 3 + d.eSt) * 4000000;
-        const decode = v => ({
-            mMin:  v % 2000,
-            eMin:  Math.floor(v / 2000) % 2000,
-            mSt:   Math.floor(v / 4000000 / 3) | 0,
-            eSt:   Math.floor(v / 4000000) % 3
-        });
 
         const eraWidget = new EraWidget();
         eraWidget.init({
             needRealtimeConfigs: true,
             needActions: true,
-            maxRealtimeConfigsCount: 7,
-            maxActionsCount: 7,
+            maxRealtimeConfigsCount: 7,   // 1 config/ngày → ESP32 gửi status
+            maxActionsCount: 14,          // 2 action/ngày: [i*2]=sáng, [i*2+1]=chiều
             minRealtimeConfigsCount: 0,
             minActionsCount: 0,
             onConfiguration: c => { cfg = c; acts = c.actions || []; },
             onValues: values => {
+                // ESP32 gửi: value = mSt + eSt*3
                 (cfg.realtime_configs || []).forEach((c, i) => {
                     if (c && values[c.id] != null) {
-                        data[i] = decode(+values[c.id].value || 0);
+                        const v = +values[c.id].value || 0;
+                        data[i].mSt = v % 3;
+                        data[i].eSt = Math.floor(v / 3) % 3;
                     }
                 });
                 render();
@@ -221,9 +217,13 @@
         }
 
         function setTime(i, p, v) {
-            data[i][p === 'm' ? 'mMin' : 'eMin'] = toMin(v);
-            if (acts[i]) {
-                eraWidget.triggerAction(acts[i].action, encode(data[i]));
+            const min = toMin(v);
+            const isMorning = p === 'm';
+            data[i][isMorning ? 'mMin' : 'eMin'] = min;
+            // Sáng → acts[i*2], Chiều → acts[i*2+1], gửi giá trị phút
+            const actionIdx = i * 2 + (isMorning ? 0 : 1);
+            if (acts[actionIdx]) {
+                eraWidget.triggerAction(acts[actionIdx].action, min);
             }
         }
 
