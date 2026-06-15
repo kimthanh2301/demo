@@ -113,22 +113,31 @@
             width: 14px;
             height: 14px;
             border-radius: 50%;
-            transition: all 0.3s ease;
+            transition: all 0.4s ease;
+        }
+        .led-indicator.updating {
+            animation: led-pop 0.4s ease;
+        }
+        @keyframes led-pop {
+            0%   { transform: scale(1); }
+            50%  { transform: scale(1.5); }
+            100% { transform: scale(1); }
         }
 
-        .s0 { /* Chưa uống */
-            background: #334155; 
-            border: 2px solid #475569; 
-        } 
-        .s1 { /* Đã uống (Xanh phát sáng) */
-            background: #10b981; 
-            box-shadow: 0 0 10px rgba(16, 185, 129, 0.6), inset 0 0 4px rgba(255,255,255,0.4); 
+        .s0 { background: #334155; border: 2px solid #475569; }
+        .s1 { /* Đã uống - xanh phát sáng */
+            background: #10b981;
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.7), inset 0 0 4px rgba(255,255,255,0.4);
             border: 1px solid #059669;
-        } 
-        .s2 { /* Quên (Đỏ phát sáng) */
-            background: #ef4444; 
-            box-shadow: 0 0 10px rgba(239, 68, 68, 0.6), inset 0 0 4px rgba(255,255,255,0.4); 
-            border: 1px solid #dc2626;
+        }
+
+        /* Loading state */
+        .day-card.loading .led-indicator {
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 0.3; }
+            50%       { opacity: 0.7; }
         }
 
         /* Header cho Sáng / Chiều */
@@ -174,7 +183,7 @@
 <body>
 
     <div class="widget-container">
-        <h2>💊 Lịch Uống Thuốc ver test </h2>
+        <h2>💊 Lịch nhắc nhở </h2>
         
         <div class="header-row">
             <div>Thứ</div>
@@ -190,72 +199,106 @@
     <script>
         const DAYS = ['T2','T3','T4','T5','T6','T7','CN'];
 
-        // data[i]: mMin/eMin = phút (0-1439), mSt/eSt = 0(chưa) 1(uống) 2(quên)
-        let data = Array(7).fill(0).map(() => ({ mMin: 480, eMin: 1080, mSt: 0, eSt: 0 }));
+        // data[i].status: bitmask 0-3
+        //   bit0 (& 1)  = sáng: 0=chưa, 1=đã uống
+        //   bit1 (>> 1) = chiều: 0=chưa, 1=đã uống
+        //   0=chưa cả 2, 1=uống sáng, 2=uống chiều, 3=uống cả 2
+        let data = Array(7).fill(0).map(() => ({ mMin: 480, eMin: 1080, status: 0 }));
         let cfg = {}, acts = [];
 
         const toTime = m => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
         const toMin  = t => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
 
+        // Khôi phục giờ từ localStorage
+        try {
+            const saved = JSON.parse(localStorage.getItem('medSchedule') || '[]');
+            saved.forEach((d, i) => {
+                if (d?.mMin != null) data[i].mMin = d.mMin;
+                if (d?.eMin != null) data[i].eMin = d.eMin;
+            });
+        } catch(e) {}
+
         const eraWidget = new EraWidget();
         eraWidget.init({
             needRealtimeConfigs: true,
             needActions: true,
-            maxRealtimeConfigsCount: 7,   // 1 config/ngày → ESP32 gửi status
-            maxActionsCount: 14,          // 2 action/ngày: [i*2]=sáng, [i*2+1]=chiều
+            maxRealtimeConfigsCount: 7,  // 1 config/ngày → ESP32 gửi value 0-3
+            maxActionsCount: 14,         // [i*2]=sáng, [i*2+1]=chiều (gửi phút)
             minRealtimeConfigsCount: 0,
             minActionsCount: 0,
-            onConfiguration: c => { cfg = c; acts = c.actions || []; },
+            onConfiguration: c => {
+                cfg = c;
+                acts = c.actions || [];
+                // Xóa loading sau khi có config
+                document.querySelectorAll('.day-card').forEach(el => el.classList.remove('loading'));
+            },
             onValues: values => {
-                // ESP32 gửi: value = mSt + eSt*3
+                // ESP32 gửi: value = 0/1/2/3 (bitmask sáng|chiều)
                 (cfg.realtime_configs || []).forEach((c, i) => {
                     if (c && values[c.id] != null) {
-                        const v = +values[c.id].value || 0;
-                        data[i].mSt = v % 3;
-                        data[i].eSt = Math.floor(v / 3) % 3;
+                        const newStatus = +values[c.id].value & 3;
+                        if (data[i].status !== newStatus) {
+                            data[i].status = newStatus;
+                            updateLED(i); // chỉ update LED, không re-render toàn bộ
+                        }
                     }
                 });
-                render();
             }
         });
+
+        function updateLED(i) {
+            const d = data[i];
+            const mSt = d.status & 1;
+            const eSt = (d.status >> 1) & 1;
+            const card = document.getElementById(`card-${i}`);
+            if (!card) return;
+            const leds = card.querySelectorAll('.led-indicator');
+            leds.forEach(led => {
+                led.classList.add('updating');
+                setTimeout(() => led.classList.remove('updating'), 400);
+            });
+            leds[0].className = `led-indicator s${mSt}`;
+            leds[1].className = `led-indicator s${eSt}`;
+        }
 
         function render() {
             document.getElementById('scheduleList').innerHTML = DAYS.map((day, i) => {
                 const d = data[i];
+                const mSt = d.status & 1;
+                const eSt = (d.status >> 1) & 1;
+                const mTip = mSt ? 'Đã uống ✅' : 'Chưa uống';
+                const eTip = eSt ? 'Đã uống ✅' : 'Chưa uống';
                 return `
-                <div class="day-card">
+                <div class="day-card loading" id="card-${i}">
                     <div class="day-name">${day}</div>
-                    
                     <div class="time-slot">
                         <input type="time" value="${toTime(d.mMin)}" onchange="setTime(${i},'m',this.value,this)" title="Chỉnh giờ Sáng">
-                        <div class="led-indicator s${d.mSt}" title="Trạng thái: ${d.mSt===0?'Chưa uống':d.mSt===1?'Đã uống':'Quên'}"></div>
+                        <div class="led-indicator s${mSt}" title="Sáng: ${mTip}"></div>
                     </div>
-                    
                     <div class="time-slot">
                         <input type="time" value="${toTime(d.eMin)}" onchange="setTime(${i},'e',this.value,this)" title="Chỉnh giờ Chiều">
-                        <div class="led-indicator s${d.eSt}" title="Trạng thái: ${d.eSt===0?'Chưa uống':d.eSt===1?'Đã uống':'Quên'}"></div>
+                        <div class="led-indicator s${eSt}" title="Chiều: ${eTip}"></div>
                     </div>
                 </div>`;
             }).join('');
         }
 
-        // Chỉ lưu local, đánh dấu dirty — không gửi ngay
         function setTime(i, p, v, el) {
             data[i][p === 'm' ? 'mMin' : 'eMin'] = toMin(v);
             if (el) el.classList.add('dirty');
+            localStorage.setItem('medSchedule', JSON.stringify(
+                data.map(d => ({ mMin: d.mMin, eMin: d.eMin }))
+            ));
         }
 
-        // Nút Lưu: gửi đồng loạt tất cả 14 actions
         function sendAll() {
             const btn = document.getElementById('saveBtn');
             if (btn.classList.contains('sending')) return;
             btn.classList.add('sending');
             btn.textContent = '⏳ Đang gửi...';
-
             let idx = 0;
             function sendNext() {
                 if (idx >= 14) {
-                    // Xong hết — reset UI
                     btn.classList.remove('sending');
                     btn.textContent = '✅ Đã lưu!';
                     document.querySelectorAll('input.dirty').forEach(el => el.classList.remove('dirty'));
@@ -265,11 +308,9 @@
                 const i = Math.floor(idx / 2);
                 const isMorning = idx % 2 === 0;
                 const min = data[i][isMorning ? 'mMin' : 'eMin'];
-                if (acts[idx]) {
-                    eraWidget.triggerAction(acts[idx].action, null, { value: min });
-                }
+                if (acts[idx]) eraWidget.triggerAction(acts[idx].action, null, { value: min });
                 idx++;
-                setTimeout(sendNext, 150); // delay 150ms giữa mỗi action tránh spam
+                setTimeout(sendNext, 150);
             }
             sendNext();
         }
