@@ -145,13 +145,36 @@
             margin-bottom: 12px;
         }
         .header-row > div:first-child { text-align: left; }
+
+        /* Nút gửi */
+        .save-btn {
+            display: block;
+            width: 100%;
+            margin-top: 20px;
+            padding: 14px;
+            background: linear-gradient(135deg, #0ea5e9, #38bdf8);
+            color: #0f172a;
+            border: none;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: 700;
+            cursor: pointer;
+            letter-spacing: 0.5px;
+            transition: all 0.2s;
+        }
+        .save-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(56,189,248,0.35); }
+        .save-btn:active { transform: translateY(0); }
+        .save-btn.sending { background: #334155; color: #94a3b8; cursor: not-allowed; }
+
+        /* Ô giờ có thay đổi chưa gửi */
+        input[type="time"].dirty { border-color: #fbbf24; }
         
     </style>
 </head>
 <body>
 
     <div class="widget-container">
-        <h2>💊 Lịch Uống Thuốc Thông Minh V1.0</h2>
+        <h2>💊 Lịch Uống Thuốc Thông Minh V1.1/h2>
         
         <div class="header-row">
             <div>Thứ</div>
@@ -159,8 +182,8 @@
             <div>🌙 Buổi Chiều</div>
         </div>
 
-        <div class="schedule-list" id="scheduleList">
-            </div>
+        <div class="schedule-list" id="scheduleList"></div>
+        <button class="save-btn" id="saveBtn" onclick="sendAll()">💾 Lưu & Gửi Lịch Lên ERa</button>
     </div>
 
     <script src="https://www.unpkg.com/@eohjsc/era-widget@1.1.3/src/index.js"></script>
@@ -216,15 +239,40 @@
             }).join('');
         }
 
+        // Chỉ lưu local, đánh dấu dirty — không gửi ngay
         function setTime(i, p, v) {
-            const min = toMin(v);
-            const isMorning = p === 'm';
-            data[i][isMorning ? 'mMin' : 'eMin'] = min;
-            // Sáng → acts[i*2], Chiều → acts[i*2+1], gửi giá trị phút
-            const actionIdx = i * 2 + (isMorning ? 0 : 1);
-            if (acts[actionIdx]) {
-                eraWidget.triggerAction(acts[actionIdx].action, min);
+            data[i][p === 'm' ? 'mMin' : 'eMin'] = toMin(v);
+            // Đánh dấu ô vừa chỉnh màu vàng
+            event.target.classList.add('dirty');
+        }
+
+        // Nút Lưu: gửi đồng loạt tất cả 14 actions
+        function sendAll() {
+            const btn = document.getElementById('saveBtn');
+            if (btn.classList.contains('sending')) return;
+            btn.classList.add('sending');
+            btn.textContent = '⏳ Đang gửi...';
+
+            let idx = 0;
+            function sendNext() {
+                if (idx >= 14) {
+                    // Xong hết — reset UI
+                    btn.classList.remove('sending');
+                    btn.textContent = '✅ Đã lưu!';
+                    document.querySelectorAll('input.dirty').forEach(el => el.classList.remove('dirty'));
+                    setTimeout(() => btn.textContent = '💾 Lưu & Gửi Lịch Lên ERa', 2000);
+                    return;
+                }
+                const i = Math.floor(idx / 2);
+                const isMorning = idx % 2 === 0;
+                const min = data[i][isMorning ? 'mMin' : 'eMin'];
+                if (acts[idx]) {
+                    eraWidget.triggerAction(acts[idx].action, min);
+                }
+                idx++;
+                setTimeout(sendNext, 150); // delay 150ms giữa mỗi action tránh spam
             }
+            sendNext();
         }
 
         render();
