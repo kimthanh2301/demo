@@ -174,7 +174,7 @@
 <body>
 
     <div class="widget-container">
-        <h2>💊 Lịch Uống Thuốc Thông Minh V1.1/h2>
+        <h2>💊 Lịch Uống Thuốc Thông Minh</h2>
         
         <div class="header-row">
             <div>Thứ</div>
@@ -227,12 +227,12 @@
                     <div class="day-name">${day}</div>
                     
                     <div class="time-slot">
-                        <input type="time" value="${toTime(d.mMin)}" onchange="setTime(${i},'m',this.value)" title="Chỉnh giờ Sáng">
+                        <input type="time" value="${toTime(d.mMin)}" onchange="setTime(${i},'m',this.value,this)" title="Chỉnh giờ Sáng">
                         <div class="led-indicator s${d.mSt}" title="Trạng thái: ${d.mSt===0?'Chưa uống':d.mSt===1?'Đã uống':'Quên'}"></div>
                     </div>
                     
                     <div class="time-slot">
-                        <input type="time" value="${toTime(d.eMin)}" onchange="setTime(${i},'e',this.value)" title="Chỉnh giờ Chiều">
+                        <input type="time" value="${toTime(d.eMin)}" onchange="setTime(${i},'e',this.value,this)" title="Chỉnh giờ Chiều">
                         <div class="led-indicator s${d.eSt}" title="Trạng thái: ${d.eSt===0?'Chưa uống':d.eSt===1?'Đã uống':'Quên'}"></div>
                     </div>
                 </div>`;
@@ -240,10 +240,9 @@
         }
 
         // Chỉ lưu local, đánh dấu dirty — không gửi ngay
-        function setTime(i, p, v) {
+        function setTime(i, p, v, el) {
             data[i][p === 'm' ? 'mMin' : 'eMin'] = toMin(v);
-            // Đánh dấu ô vừa chỉnh màu vàng
-            event.target.classList.add('dirty');
+            if (el) el.classList.add('dirty');
         }
 
         // Nút Lưu: gửi đồng loạt tất cả 14 actions
