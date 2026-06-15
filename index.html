@@ -174,7 +174,7 @@
 <body>
 
     <div class="widget-container">
-        <h2>💊 Lịch Uống Thuốc Thông Minh</h2>
+        <h2>💊 Lịch Uống Thuốc</h2>
         
         <div class="header-row">
             <div>Thứ</div>
@@ -266,7 +266,7 @@
                 const isMorning = idx % 2 === 0;
                 const min = data[i][isMorning ? 'mMin' : 'eMin'];
                 if (acts[idx]) {
-                    eraWidget.triggerAction(acts[idx].action, min);
+                    eraWidget.triggerAction(acts[idx].action, null, min);
                 }
                 idx++;
                 setTimeout(sendNext, 150); // delay 150ms giữa mỗi action tránh spam
