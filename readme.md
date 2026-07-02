@@ -67,11 +67,9 @@ flowchart TD
     S([BẮT ĐẦU — mỗi 5 giây])
     A["Đọc nhiệt độ và độ ẩm từ DHT11"]
     B{"Đọc thất bại?"}
-    B1([KẾT THÚC — bỏ qua chu kỳ])
     C["Lưu giá trị · Gửi V0 V1 lên ERa · Cập nhật LCD"]
     D{"Đang chế độ tay?"}
     E{"Đã đủ 5 phút?"}
-    E1([KẾT THÚC — giữ nguyên])
     E2["Hủy chế độ tay · Đồng bộ V25 = 2 lên App"]
     F{"Nhiệt độ trên 32°C\nhoặc Độ ẩm trên 70%?"}
     F1["Bật quạt — FAN HIGH"]
@@ -79,10 +77,10 @@ flowchart TD
     END([KẾT THÚC])
 
     S --> A --> B
-    B -- Có --> B1
+    B -- Có --> END
     B -- Không --> C --> D
     D -- Có --> E
-    E -- Chưa --> E1
+    E -- Chưa --> END
     E -- Đủ --> E2 --> F
     D -- Không --> F
     F -- Có --> F1 --> END
