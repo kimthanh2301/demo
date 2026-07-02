@@ -93,3 +93,71 @@ Mỗi 5 giây, `dhtEvent` đọc DHT11. Nếu **đọc thất bại** (NaN) thì
 
 ---
 
+## Hình 4. Giải Thuật Đọc Nút Xác Nhận — checkButton
+
+```mermaid
+flowchart TD
+    S([BẮT ĐẦU — mỗi loop])
+    A["Đọc GPIO33 — INPUT_PULLUP"]
+    B{"Trạng thái\nthay đổi?"}
+    B1["Cập nhật debounce timer"]
+    C{"Ổn định trên 50ms\nvà vừa xuống LOW?"}
+    D{"Đang có\nbáo thức active?"}
+    E["confirmDose\nGhi đã uống · Tắt LED\nV16+day lên ERa · V26 = 2"]
+    END([KẾT THÚC])
+
+    S --> A --> B
+    B -- Có --> B1 --> END
+    B -- Không --> C
+    C -- Không --> END
+    C -- Có --> D
+    D -- Không --> END
+    D -- Có --> E --> END
+```
+
+### Mô tả nguyên lý hoạt động
+
+Mỗi vòng `loop()`, `checkButton` đọc GPIO33 (nút active LOW). Nếu trạng thái **vừa thay đổi** thì cập nhật debounce timer và thoát — chưa xử lý vì chưa ổn định. Nếu **không đổi**, kiểm tra đồng thời hai điều kiện: đã ổn định trên 50ms **và** vừa chuyển xuống LOW (tức là cạnh nhấn); nếu không thỏa thì thoát. Khi thỏa, kiểm tra tiếp có đang có **báo thức active** không; nếu có thì gọi `confirmDose()` để ghi đã uống, tắt LED và đồng bộ lên ERa.
+
+---
+
+## Hình 5. Giải Thuật Giao Tiếp ERa IoT
+
+```mermaid
+flowchart TD
+    S([BẮT ĐẦU — ERa.begin])
+    A["Kết nối WiFi\nKết nối MQTT broker mqtt1.eoh.io"]
+    B{"Kết nối\nthành công?"}
+    B1["ERA_CONNECTED\nĐồng bộ thời gian NTP UTC+7\nGhi vào RTC DS3231"]
+    C["ERa.run — xử lý sự kiện mỗi loop"]
+    D{"Nhận lệnh\ntừ App?"}
+    D1{"Virtual Pin\nnào?"}
+    E1["V2–V15\nCập nhật lịch thuốc 14 liều"]
+    E2["V23 / V24\nLưu ngưỡng nhiệt độ và độ ẩm"]
+    E3["V25\nĐiều khiển quạt thủ công"]
+    F["Gửi dữ liệu lên App\nV0 V1 mỗi 5s · V16–V22 khi xác nhận · V26 khi báo thức"]
+    G{"Mất kết nối?"}
+    G1["ERA_DISCONNECTED\nTự động thử kết nối lại"]
+    END([KẾT THÚC — chờ loop tiếp theo])
+
+    S --> A --> B
+    B -- Thất bại --> A
+    B -- Thành công --> B1 --> C
+    C --> D
+    D -- Có --> D1
+    D1 -- V2-V15 --> E1 --> F
+    D1 -- V23/V24 --> E2 --> F
+    D1 -- V25 --> E3 --> F
+    D -- Không --> F
+    F --> G
+    G -- Có --> G1 --> A
+    G -- Không --> END
+```
+
+### Mô tả nguyên lý hoạt động
+
+Khi khởi động, ERa kết nối WiFi rồi kết nối MQTT broker. Nếu **thất bại** thì thử lại liên tục cho đến khi thành công. Khi **kết nối thành công**, callback `ERA_CONNECTED` được gọi để đồng bộ thời gian từ máy chủ NTP (UTC+7) vào RTC DS3231 — đảm bảo lịch thuốc luôn chạy đúng giờ thực tế.
+
+Trong mỗi vòng `loop()`, `ERa.run()` kiểm tra hàng đợi sự kiện. Nếu **App gửi lệnh xuống**, hệ thống phân loại theo virtual pin: V2–V15 cập nhật lịch uống thuốc 14 liều; V23/V24 lưu ngưỡng nhiệt độ/độ ẩm; V25 điều khiển quạt tức thì. Dù có hay không có lệnh từ App, hệ thống đều **gửi dữ liệu lên App**: nhiệt độ/độ ẩm mỗi 5 giây (V0, V1), trạng thái xác nhận uống thuốc (V16–V22) và thông báo báo thức (V26) khi có sự kiện. Nếu phát hiện **mất kết nối** thì `ERA_DISCONNECTED` được gọi và vòng lặp quay về bước kết nối lại từ đầu.
+
+---
