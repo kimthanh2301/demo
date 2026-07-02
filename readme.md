@@ -34,7 +34,6 @@ flowchart TD
     A{"Sang ngày mới?"}
     A1["Reset trạng thái 14 liều\nXóa xác nhận ngày hôm nay lên ERa"]
     B{"Giờ hiện tại\nkhớp lịch thuốc?"}
-    B1([KẾT THÚC])
     C["Bật báo thức\nLED ngày sáng · Gửi V26 = 1 lên ERa"]
     D{"Nút xác nhận\nđã nhấn?"}
     E["Ghi đã uống · Tắt LED\nCập nhật ERa · V26 = 2"]
@@ -46,7 +45,7 @@ flowchart TD
     S --> A
     A -- Có --> A1 --> B
     A -- Không --> B
-    B -- Không --> B1
+    B -- Không --> END
     B -- Có --> C --> D
     D -- Có --> E --> END
     D -- Không --> F
@@ -131,10 +130,11 @@ flowchart TD
     B1["ERA_CONNECTED\nĐồng bộ thời gian NTP UTC+7\nGhi vào RTC DS3231"]
     C["ERa.run — xử lý sự kiện mỗi loop"]
     D{"Nhận lệnh\ntừ App?"}
-    D1{"Virtual Pin\nnào?"}
-    E1["V2–V15\nCập nhật lịch thuốc 14 liều"]
-    E2["V23 / V24\nLưu ngưỡng nhiệt độ và độ ẩm"]
-    E3["V25\nĐiều khiển quạt thủ công"]
+    DV{"Là pin\nV2\u2013V15?"}
+    DV2{"Là pin\nV23 hoặc V24?"}
+    E1["Cập nhật lịch thuốc 14 liều"]
+    E2["Lưu ngưỡng nhiệt độ và độ ẩm"]
+    E3["Điều khiển quạt thủ công"]
     F["Gửi dữ liệu lên App\nV0 V1 mỗi 5s · V16–V22 khi xác nhận · V26 khi báo thức"]
     G{"Mất kết nối?"}
     G1["ERA_DISCONNECTED\nTự động thử kết nối lại"]
@@ -144,10 +144,11 @@ flowchart TD
     B -- Thất bại --> A
     B -- Thành công --> B1 --> C
     C --> D
-    D -- Có --> D1
-    D1 -- V2-V15 --> E1 --> F
-    D1 -- V23/V24 --> E2 --> F
-    D1 -- V25 --> E3 --> F
+    D -- Có --> DV
+    DV -- Có --> E1 --> F
+    DV -- Không --> DV2
+    DV2 -- Có --> E2 --> F
+    DV2 -- Không --> E3 --> F
     D -- Không --> F
     F --> G
     G -- Có --> G1 --> A
